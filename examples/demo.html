@@ -26,9 +26,32 @@
 				font-size: 14px;
 				cursor: pointer;
 			}
+			#finger{
+				display:none;
+				width: 20px;
+				height: 20px;
+				position: absolute;
+				left: 50%;
+				top: 50%;
+			}
+
+			dialog{
+				background-color: #fdf6ec;
+				border-color: #faecd8;
+				color: #e6a23c;
+				top: 150px;
+				width: 250px;
+				border-radius: 10px;
+				border-width: 1px;
+				transition: opacity .3s,transform .4s,-webkit-transform .4s;
+			}
+
 		</style>
 	</head>
 	<body>
+		
+
+		<img id="finger" src="./images/finger.png"  alt="" />
 		<div id="blocker">
 			<div id="instructions">
 				<p style="font-size:36px">
@@ -75,6 +98,7 @@
 			animate();
 			createPanel();
 
+
 			function init() {
 
 				camera = new THREE.PerspectiveCamera( 45, window.innerWidth / window.innerHeight, 1, 2000 );
@@ -93,6 +117,7 @@
 
 				const blocker = document.getElementById( 'blocker' );
 				const instructions = document.getElementById( 'instructions' );
+				const finger = document.getElementById( 'finger' );
 
 				instructions.addEventListener( 'click', function () {
 
@@ -105,12 +130,17 @@
 					instructions.style.display = 'none';
 					blocker.style.display = 'none';
 
+				    document.body.addEventListener('mousedown', onMouseclick, false);
+				    finger.style.display = 'block'
 				} );
 
 				controls.addEventListener( 'unlock', function () {
 
 					blocker.style.display = 'block';
 					instructions.style.display = '';
+
+					document.body.removeEventListener('mousedown', onMouseclick, false);
+					finger.style.display = 'none'
 
 				} );
 
@@ -192,6 +222,8 @@
 				document.body.appendChild( renderer.domElement );
 				
 				window.addEventListener( 'resize', onWindowResize );
+				
+
 			}
 			function initFbxs() {
 				texturePlante0 = THREE.ImageUtils.loadTexture("models/fbx/4k1_Diffuse.jpeg",null,function(t){});
@@ -336,12 +368,64 @@
 			}
 
 			function animate() {
-
+				render();
 				requestAnimationFrame( animate );
+				renderer.render( scene, camera );
+			}
 
+			function render(){
+				controlsRender();
+			}
+
+			 
+    // 鼠标双击触发的方法
+    function onMouseclick(event) {
+ 
+        // 获取 raycaster 和所有模型相交的数组，其中的元素按照距离排序，越近的越靠前
+        var intersects = getIntersects(event);
+ 
+        // 获取选中最近的 Mesh 对象
+        if (intersects.length != 0 && intersects[0].object instanceof THREE.Mesh) {
+            let selectObject = intersects[0].object;
+			alert("click on "+selectObject.name);
+
+			console.log(selectObject)
+        } else {
+            alert("未选中 Mesh!");
+        }
+    }
+
+			 // 获取与射线相交的对象数组
+			 function getIntersects(event) {
+				event.preventDefault();
+				console.log("event.clientX:"+event.clientX)
+				console.log("event.clientY:"+event.clientY)
+		 
+				// 声明 raycaster 和 mouse 变量
+				var raycaster = new THREE.Raycaster();
+				var mouse = new THREE.Vector2();
+		 
+				// 通过鼠标点击位置,计算出 raycaster 所需点的位置,以屏幕为中心点,范围 -1 到 1
+				mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
+				mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
+		 
+				//通过鼠标点击的位置(二维坐标)和当前相机的矩阵计算出射线位置
+				raycaster.setFromCamera(mouse, camera);
+		 
+				// 获取与射线相交的对象数组，其中的元素按照距离排序，越近的越靠前
+				var intersects = raycaster.intersectObjects(scene.children);
+		 
+				//返回选中的对象
+				return intersects;
+			}
+
+
+			function controlsRender(){
 				const time = performance.now();
 
 				if ( controls.isLocked === true ) {
+
+					
 
 					raycaster.ray.origin.copy( controls.getObject().position );
 					raycaster.ray.origin.y -= 10;
@@ -350,10 +434,11 @@
 
 					const onObject = intersections.length > 0;
 
-					const delta = ( time - prevTime ) / 1000;
+					const delta = ( time - prevTime ) / 500;
 
 					velocity.x -= velocity.x * 5.0 * delta;//移动速度
 					velocity.z -= velocity.z * 5.0 * delta;//移动速度
+
 
 					velocity.y -= 9.8 * 100.0 * delta; // 100.0 = mass
 
@@ -382,15 +467,29 @@
 						controls.getObject().position.y = 10;
 
 						canJump = true;
-
 					}
 
 				}
-
 				prevTime = time;
+				impactCheck()
+			}
 
-				renderer.render( scene, camera );
-
+			//碰撞检测
+			function impactCheck(){
+				//(-515,-550)(515,550)
+				let position = controls.getObject().position;
+				if(position.x<-515){
+					controls.getObject().position.x= -515;
+				}
+				if(position.x>515){
+					controls.getObject().position.x= 515;
+				}
+				if(position.z<-550){
+					controls.getObject().position.z= -550;
+				}
+				if(position.z>550){
+					controls.getObject().position.z= 550;
+				}
 			}
 
 		</script>
