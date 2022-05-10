@@ -1,51 +1,70 @@
 <!DOCTYPE html5>
 <html lang="en">
-  <head>
-    <title>demo</title>
-    <meta charset="utf-8" />
-    <meta
-      name="viewport"
-      content="width=device-width, user-scalable=no, minimum-scale=1.0, maximum-scale=1.0"
-    />
-    <link type="text/css" rel="stylesheet" href="main.css" />
-    <style>
-      #finger {
-        display: none;
-        width: 20px;
-        height: 20px;
-        position: absolute;
-        left: 50%;
-        top: 50%;
-      }
 
-      dialog {
-        background-color: #fdf6ec;
-        border-color: #faecd8;
-        color: #e6a23c;
-        top: 150px;
-        width: 250px;
-        border-radius: 10px;
-        border-width: 1px;
-        transition: opacity 0.3s, transform 0.4s, -webkit-transform 0.4s;
-      }
-      #lock-model {
-        position: absolute;
-        margin-top: 10px;
-        margin-left: 10px;
-      }
-    </style>
-  </head>
-  <body>
-    <img id="finger" src="./images/finger.png" alt="" />
-    <button id="lock-model">Enter Lock Model</button>
+<head>
+  <title>demo</title>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, user-scalable=no, minimum-scale=1.0, maximum-scale=1.0" />
+  <link type="text/css" rel="stylesheet" href="main.css" />
+  <style>
+    #loading {
+      position: absolute;
+      width: 100%;
+      height: 100%;
+      background-color: #f3f3f3;
+      z-index: 100 !important;
+    }
 
-    <script type="module">
-      import * as THREE from "../build/three.module.js";
+    #finger {
+      display: none;
+      width: 20px;
+      height: 20px;
+      position: absolute;
+      left: 50%;
+      top: 50%;
+    }
+
+    dialog {
+      background-color: #fdf6ec;
+      border-color: #faecd8;
+      color: #e6a23c;
+      top: 150px;
+      width: 250px;
+      border-radius: 10px;
+      border-width: 1px;
+      transition: opacity 0.3s, transform 0.4s, -webkit-transform 0.4s;
+    }
+
+    #lock-model {
+      position: absolute;
+      margin-top: 10px;
+      margin-left: 10px;
+    }
+  </style>
+</head>
+
+<body>
+
+  <img id="finger" src="./images/finger.png" alt="" />
+  <button id="lock-model">Enter Lock Model</button>
+
+  <div id="loading">
+    <img style="position: absolute;left:50%;top:50%;margin-top:-250px;margin-left: -250px;" src="./images/loading.gif"
+      alt="" srcset="">
+  </div>
+  <script type="module">
+    import * as THREE from "../build/three.module.js";
 
       import { PointerLockControls } from "./jsm/controls/PointerLockControls.js";
       import { OrbitControls } from "./jsm/controls/OrbitControls.js";
 
       import { TransformControls } from "./jsm/controls/controls.js";
+
+      import { FXAAShader } from './jsm/shaders/FXAAShader.js'
+      import { EffectComposer } from "./jsm/postprocessing/EffectComposer.js";
+      import { RenderPass } from "./jsm/postprocessing/RenderPass.js";
+      import { ShaderPass } from './jsm/postprocessing/ShaderPass.js'
+      import { OutlinePass } from './jsm/postprocessing/OutlinePass.js'
 
       import { FBXLoader } from "./jsm/loaders/FBXLoader.js";
       import { GUI } from "./jsm/libs/lil-gui.module.min.js";
@@ -185,7 +204,6 @@
           color1: color1,
         };
       })();
-      console.log(alphaMaps);
 
       const envMapKeys = getObjectsKeys(envMaps);
       const envMapKeysPBR = envMapKeys.slice(0, 2);
@@ -316,9 +334,7 @@
 
         const folder = gui.addFolder("THREE.MeshStandardMaterial");
 
-        folder
-          .addColor(data, "color")
-          .onChange(handleColorChange(material.color));
+        folder.addColor(data, "color").onChange(handleColorChange(material.color));
         folder.add(material, "roughness", 0, 1);
         folder.add(material, "metalness", 0, 1);
         folder
@@ -333,6 +349,9 @@
         //   .add(material, "vertexColors")
         //   .onChange(needsUpdate(material, geometry));
         // folder.add(material, "fog");
+
+       
+
         folder
           .add(data, "map", diffuseMapKeys)
           .onChange(updateTexture(material, "map", diffuseMaps));
@@ -374,6 +393,9 @@
         let material;
         material = new THREE.MeshStandardMaterial({ color: 0xffffff });
         material.side = THREE.DoubleSide;
+        material.map = mesh.material.map;
+        material.needsUpdate = true;
+
         guiMaterial(gui, mesh, material, geometry);
         guiMeshStandardMaterial(gui, mesh, material, geometry);
 
@@ -381,6 +403,7 @@
         return material;
       }
 
+      let loading
       var camera, scene, renderer, controls, material0;
       let texturePlante0, texturePlante1, texturePlante2, texturePlante3;
       let fbxModels;
@@ -404,13 +427,18 @@
       var ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
       let spotLight;
       let orbitControls;
-	  let transformControls;
+	    let transformControls;
+
+			let composer,renderPass,outlinePass
+
 
       init();
       animate();
       //createPanel();
 
       function init() {
+        loading = document.getElementById("loading");
+
         camera = new THREE.PerspectiveCamera(
           45,
           window.innerWidth / window.innerHeight,
@@ -431,7 +459,9 @@
         const light = new THREE.PointLight(0xffffff);
         light.position.set(0, 200, 0);
         scene.add(light);
-        const sphereSize = 1;
+
+
+        const sphereSize = 10;
         const pointLightHelper = new THREE.PointLightHelper(light, sphereSize);
         scene.add(pointLightHelper);
         scene.add(ambientLight);
@@ -442,9 +472,9 @@
         const lockModuleButton = document.getElementById("lock-model");
         lockModuleButton.addEventListener("click", function () {
           controls.lock();
-		  if(transformControls){
-			  transformControls.detach();
-		  }
+          if(transformControls){
+            transformControls.detach();
+          }
           if (gui) {
             gui.close();
           }
@@ -458,6 +488,10 @@
         controls.addEventListener("unlock", function () {
           finger.style.display = "none";
           document.body.removeEventListener("mousedown", onMouseclick, false);
+
+          if(outlinePass){
+            outlinePass.selectedObjects = []
+          }
         });
 
         scene.add(controls.getObject());
@@ -530,6 +564,8 @@
         renderer = new THREE.WebGLRenderer({ antialias: true });
         renderer.setPixelRatio(window.devicePixelRatio);
         renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.shadowMap.enabled = true;
+
         document.body.appendChild(renderer.domElement);
 
         window.addEventListener("resize", onWindowResize);
@@ -540,10 +576,10 @@
         orbitControls.target.set(0, 0, -200);
         camera.lookAt(0, 0, -200);
 
-		transformControls = new TransformControls(camera, renderer.domElement);
-		transformControls.setMode( "rotate" );//
-		transformControls.showY = true;
-		scene.add(transformControls);
+          transformControls = new TransformControls(camera, renderer.domElement);
+          transformControls.setMode( "rotate" );//
+          transformControls.showY = true;
+          scene.add(transformControls);
 
         initFbxs();
 
@@ -640,6 +676,9 @@
           });
 
           scene.add(object);
+
+
+          loading.style.display = 'none';
         });
       }
 
@@ -659,6 +698,9 @@
         render();
         requestAnimationFrame(animate);
         renderer.render(scene, camera);
+        if(composer){
+          composer.render();
+        }
       }
 
       function render() {
@@ -667,13 +709,13 @@
 
       // 鼠标双击触发的方法
       function onMouseclick(event) {
+        //controls.unlock();
+
         console.log(event);
-        controls.unlock();
 
         // 获取 raycaster 和所有模型相交的数组，其中的元素按照距离排序，越近的越靠前
         var intersects = getIntersects(event);
 
-		console.log(intersects)
         // 获取选中最近的 Mesh 对象
         if (
           intersects.length != 0 &&
@@ -685,18 +727,17 @@
 
           if (selectObject.name == "4_BG") return;
 
-          console.log(selectObject.geometry);
           //selectObject.geometry.center()
           let position = selectObject.position;
           orbitControls.target.set(position.x, 0, position.z);
           //orbitControls.target.set(0, 0, -200);
 
-		  orbitControls.enabled = false;
-		  transformControls.attach( selectObject );
-		 
+          outlineObj([selectObject])
 
 
-          console.log(gui);
+		     orbitControls.enabled = false;
+		     transformControls.attach( selectObject );
+
 
           selectObject.material = chooseFromHash(
             gui,
@@ -709,6 +750,38 @@
           alert("未选中 Mesh!");
         }
       }
+
+      function outlineObj (selectedObjects) {
+       
+            if(!composer){
+                // 创建一个EffectComposer（效果组合器）对象，然后在该对象上添加后期处理通道。
+                composer = new EffectComposer(renderer)
+                // 新建一个场景通道  为了覆盖到原理来的场景上
+                renderPass = new RenderPass(scene, camera)
+                composer.addPass(renderPass);
+                // 物体边缘发光通道
+                outlinePass = new OutlinePass(new THREE.Vector2(window.innerWidth, window.innerHeight), scene, camera, selectedObjects)
+                outlinePass.selectedObjects = selectedObjects
+                outlinePass.edgeStrength = 20.0 // 边框的亮度
+                outlinePass.edgeGlow = 1// 光晕[0,1]
+                outlinePass.usePatternTexture = false // 是否使用父级的材质
+                outlinePass.edgeThickness = 4.0 // 边框宽度
+                outlinePass.downSampleRatio = 1 // 边框弯曲度
+                outlinePass.pulsePeriod = 5 // 呼吸闪烁的速度
+                //outlinePass.visibleEdgeColor.set('red'); // 设置显示的颜色
+                //outlinePass.hiddenEdgeColor.set('white'); // 设置隐藏的颜色
+                outlinePass.clear = true
+                composer.addPass(outlinePass)
+                // 自定义的着色器通道 作为参数
+                var effectFXAA = new ShaderPass(FXAAShader)
+                effectFXAA.uniforms.resolution.value.set(1 / window.innerWidth, 1 / window.innerHeight)
+                effectFXAA.renderToScreen = true
+                composer.addPass(effectFXAA)
+            }else{
+              outlinePass.selectedObjects = selectedObjects
+            }
+       
+        }
 
       // 获取与射线相交的对象数组
       function getIntersects(event) {
@@ -800,5 +873,6 @@
         }
       }
     </script>
-  </body>
+</body>
+
 </html>
